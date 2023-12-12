@@ -26,13 +26,13 @@ std::error_condition jsonObjectFromFile(std::string const& filename, json& json_
     return std::error_condition();
 }
 
-std::error_condition loadConfigFile(json& config_map, std::string const& _group_id, int32_t const _srv_id) {
-    auto const config_file = fmt::format(FMT_STRING("{}_s{}/config.json"), _group_id, _srv_id);
+std::error_condition loadConfigFile(json& config_map, std::string const& _group_id, int32_t const srv_id_) {
+    auto const config_file = fmt::format(FMT_STRING("{}_s{}/config.json"), _group_id, srv_id_);
     return jsonObjectFromFile(config_file, config_map);
 }
 
-std::error_condition loadStateFile(json& state_map, std::string const& _group_id, int32_t const _srv_id) {
-    auto const state_file = fmt::format(FMT_STRING("{}_s{}/state.json"), _group_id, _srv_id);
+std::error_condition loadStateFile(json& state_map, std::string const& _group_id, int32_t const srv_id_) {
+    auto const state_file = fmt::format(FMT_STRING("{}_s{}/state.json"), _group_id, srv_id_);
     return jsonObjectFromFile(state_file, state_map);
 }
 
@@ -77,14 +77,17 @@ nuraft::ptr< nuraft::cluster_config > fromClusterConfig(json const& cluster_conf
 
 simple_state_mgr::simple_state_mgr(int32_t srv_id, nuraft_mesg::peer_id_t const& srv_addr,
                                    nuraft_mesg::group_id_t const& group_id) :
-        nuraft_mesg::mesg_state_mgr(), _srv_id(srv_id), _srv_addr(to_string(srv_addr)), _group_id(to_string(group_id)) {}
+        nuraft_mesg::DCSStateManager(),
+        srv_id_(srv_id),
+        _srv_addr(to_string(srv_addr)),
+        _group_id(to_string(group_id)) {}
 
 nuraft::ptr< nuraft::cluster_config > simple_state_mgr::load_config() {
     LOGDEBUG("Loading config for [{}]", _group_id);
     json config_map;
-    if (auto err = loadConfigFile(config_map, _group_id, _srv_id); !err) { return fromClusterConfig(config_map); }
+    if (auto err = loadConfigFile(config_map, _group_id, srv_id_); !err) { return fromClusterConfig(config_map); }
     auto conf = nuraft::cs_new< nuraft::cluster_config >();
-    conf->get_servers().push_back(nuraft::cs_new< nuraft::srv_config >(_srv_id, _srv_addr));
+    conf->get_servers().push_back(nuraft::cs_new< nuraft::srv_config >(srv_id_, _srv_addr));
     return conf;
 }
 
@@ -93,10 +96,10 @@ nuraft::ptr< nuraft::log_store > simple_state_mgr::load_log_store() {
 }
 
 nuraft::ptr< nuraft::srv_state > simple_state_mgr::read_state() {
-    LOGDEBUG("Loading state for server: {}", _srv_id);
+    LOGDEBUG("Loading state for server: {}", srv_id_);
     json state_map;
     auto state = nuraft::cs_new< nuraft::srv_state >();
-    if (auto err = loadStateFile(state_map, _group_id, _srv_id); !err) {
+    if (auto err = loadStateFile(state_map, _group_id, srv_id_); !err) {
         try {
             state->set_term(static_cast< uint64_t >(state_map["term"]));
             state->set_voted_for(static_cast< int >(state_map["voted_for"]));
@@ -106,7 +109,7 @@ nuraft::ptr< nuraft::srv_state > simple_state_mgr::read_state() {
 }
 
 void simple_state_mgr::save_config(const nuraft::cluster_config& config) {
-    auto const config_file = fmt::format(FMT_STRING("{}_s{}/config.json"), _group_id, _srv_id);
+    auto const config_file = fmt::format(FMT_STRING("{}_s{}/config.json"), _group_id, srv_id_);
     auto json_obj = json{{"log_idx", config.get_log_idx()},
                          {"prev_log_idx", config.get_prev_log_idx()},
                          {"eventual_consistency", config.is_async_replication()},
@@ -119,7 +122,7 @@ void simple_state_mgr::save_config(const nuraft::cluster_config& config) {
 }
 
 void simple_state_mgr::save_state(const nuraft::srv_state& state) {
-    auto const state_file = fmt::format(FMT_STRING("{}_s{}/state.json"), _group_id, _srv_id);
+    auto const state_file = fmt::format(FMT_STRING("{}_s{}/state.json"), _group_id, srv_id_);
     auto json_obj = json{{"term", state.get_term()}, {"voted_for", state.get_voted_for()}};
 
     try {

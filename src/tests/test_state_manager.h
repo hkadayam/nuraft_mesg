@@ -14,17 +14,17 @@
  *********************************************************************************/
 #pragma once
 
-#include "nuraft_mesg/mesg_state_mgr.hpp"
+#include "nuraft_mesg/dcs_state_mgr.hpp"
 #include <sisl/logging/logging.h>
 
 class test_state_machine;
 
 namespace nuraft_mesg {
-class Manager;
+class DCSManager;
 class service;
 } // namespace nuraft_mesg
 
-class test_state_mgr : public nuraft_mesg::mesg_state_mgr {
+class test_state_mgr : public nuraft_mesg::DCSStateManager {
     bool _will_destroy{false};
 
 public:
@@ -36,7 +36,7 @@ public:
     void save_state(const nuraft::srv_state& state) override;
     nuraft::ptr< nuraft::srv_state > read_state() override;
     nuraft::ptr< nuraft::log_store > load_log_store() override;
-    int32_t server_id() override { return _srv_id; }
+    int32_t server_id() override { return srv_id_; }
 
     void system_exit(const int exit_code) override { LOGINFO("System exiting with code [{}]", exit_code); }
 
@@ -53,7 +53,7 @@ public:
                                                                      std::string const& request_name,
                                                                      nuraft_mesg::io_blob_list_t const& cli_buf);
 
-    bool register_data_service_apis(nuraft_mesg::Manager* messaging);
+    bool register_data_service_apis(nuraft_mesg::DCSManager* messaging);
     static void fill_data_vec(nuraft_mesg::io_blob_list_t& cli_buf);
     static uint16_t get_random_num();
     static uint32_t get_server_counter();
@@ -62,7 +62,7 @@ public:
 
 private:
 private:
-    int32_t const _srv_id;
+    int32_t const srv_id_;
     nuraft_mesg::peer_id_t const _srv_addr;
     nuraft_mesg::group_id_t const _group_id;
     std::shared_ptr< test_state_machine > _state_machine;

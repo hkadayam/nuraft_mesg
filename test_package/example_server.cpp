@@ -2,7 +2,7 @@
 #include <csignal>
 
 #include <boost/uuid/string_generator.hpp>
-#include <nuraft_mesg/nuraft_mesg.hpp>
+#include <nuraft_mesg/nuraft_dcs.hpp>
 #include <sisl/grpc/rpc_client.hpp>
 #include <sisl/grpc/rpc_server.hpp>
 #include <sisl/logging/logging.h>
@@ -48,11 +48,11 @@ void handle(int signal) {
     }
 }
 
-class Application : public nuraft_mesg::MessagingApplication, public std::enable_shared_from_this< Application > {
+class Application : public nuraft_mesg::DCSApplication, public std::enable_shared_from_this< Application > {
 public:
     uint32_t port_;
     nuraft_mesg::peer_id_t id_;
-    std::shared_ptr< nuraft_mesg::Manager > manager_;
+    std::shared_ptr< nuraft_mesg::DCSManager > manager_;
 
     Application(nuraft_mesg::peer_id_t const& name, uint32_t port) : port_(port) { id_ = name; }
     ~Application() override = default;
@@ -68,18 +68,18 @@ public:
         return std::string();
     }
 
-    std::shared_ptr< nuraft_mesg::mesg_state_mgr > create_state_mgr(int32_t const srv_id,
-                                                                    nuraft_mesg::group_id_t const& group_id) override {
-        return std::static_pointer_cast< nuraft_mesg::mesg_state_mgr >(
+    std::shared_ptr< nuraft_mesg::DCSStateManager > create_state_mgr(int32_t const srv_id,
+                                                                     nuraft_mesg::group_id_t const& group_id) override {
+        return std::static_pointer_cast< nuraft_mesg::DCSStateManager >(
             std::make_shared< simple_state_mgr >(srv_id, id_, group_id));
     }
 
     void start() {
-        auto params = nuraft_mesg::Manager::Params();
-        params.server_uuid_ = id_;
-        params.mesg_port_ = port_;
-        params.default_group_type_ = "test_package";
-        manager_ = init_messaging(params, weak_from_this(), false);
+        auto params = nuraft_mesg::DCSManager::Params();
+        params.server_uuid = id_;
+        params.mesg_port = port_;
+        params.default_group_type = "test_package";
+        manager_ = init_consensus(params, weak_from_this(), false);
         auto r_params = nuraft::raft_params()
                             .with_election_timeout_lower(elect_to_low)
                             .with_election_timeout_upper(elect_to_high)
@@ -88,7 +88,7 @@ public:
                             .with_rpc_failure_backoff(rpc_backoff)
                             .with_auto_forwarding(true)
                             .with_snapshot_enabled(0);
-        manager_->register_mgr_type(params.default_group_type_, r_params);
+        manager_->register_mgr_type(params.default_group_type, r_params);
     }
 };
 

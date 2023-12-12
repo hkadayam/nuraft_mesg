@@ -19,23 +19,30 @@
 //
 #pragma once
 
+#include <sisl/grpc/rpc_client.hpp>
 #include "lib/client.hpp"
 
-namespace flatbuffers {
-template < typename T >
-class Offset;
-}
-
 namespace nuraft_mesg {
-
-class Request;
-class Response;
-
-class grpc_flatb_client : public grpc_base_client {
+class RaftRespMesgGrpc : public nuraft::resp_msg {
 public:
-    using handle_resp = std::function< void(Response&, ::grpc::Status&) >;
-    using grpc_base_client::grpc_base_client;
-    virtual void send(flatbuffers::Offset< Request > const& request, handle_resp complete) = 0;
+    using nuraft::resp_msg::resp_msg;
+    ~RaftRespMesgGrpc() override = default;
+
+    std::string dest_addr;
+};
+
+class DCSClientGrpc : public DCSClient, public sisl::GrpcAsyncClient {
+public:
+    DCSClientGrpc(std::string const& worker_name, std::string const& addr,
+                  const std::shared_ptr< sisl::GrpcTokenClient > token_client, std::string const& target_domain = "",
+                  std::string const& ssl_cert = "");
+
+private:
+    void init() override;
+
+protected:
+    typename ::sisl::GrpcAsyncClient::AsyncStub< DCSMessaging >::UPtr stub_;
+    std::unique_ptr< ::sisl::GrpcAsyncClient::GenericAsyncStub > generic_stub_;
 };
 
 } // namespace nuraft_mesg

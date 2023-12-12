@@ -31,8 +31,8 @@
 
 #include "libnuraft/cluster_config.hxx"
 #include "libnuraft/state_machine.hxx"
-#include "nuraft_mesg/nuraft_mesg.hpp"
-#include "nuraft_mesg/mesg_factory.hpp"
+#include "nuraft_mesg/nuraft_dcs.hpp"
+#include "nuraft_mesg/client_factory.hpp"
 
 #include "test_state_manager.h"
 
@@ -47,12 +47,12 @@ constexpr auto elect_to_high = elect_to_low * 2;
 
 namespace nuraft_mesg {
 
-class TestApplication : public MessagingApplication, public std::enable_shared_from_this< TestApplication > {
+class TestApplication : public DCSApplication, public std::enable_shared_from_this< TestApplication > {
 public:
     std::string name_;
     uint32_t port_;
     boost::uuids::uuid id_;
-    std::shared_ptr< Manager > instance_;
+    std::shared_ptr< DCSManager > instance_;
     bool data_svc_;
 
     std::map< group_id_t, std::shared_ptr< test_state_mgr > > state_mgr_map_;
@@ -69,12 +69,12 @@ public:
         return (lookup_map_.count(peer) > 0) ? lookup_map_[peer] : std::string();
     }
 
-    std::shared_ptr< mesg_state_mgr > create_state_mgr(int32_t const srv_id, group_id_t const& group_id) override {
+    std::shared_ptr< DCSStateManager > create_state_mgr(int32_t const srv_id, group_id_t const& group_id) override {
         auto [it, happened] =
             state_mgr_map_.try_emplace(group_id, std::make_shared< test_state_mgr >(srv_id, id_, group_id));
         RELEASE_ASSERT(happened, "Failed!");
         if (data_svc_) it->second->register_data_service_apis(instance_.get());
-        return std::static_pointer_cast< mesg_state_mgr >(it->second);
+        return std::static_pointer_cast< DCSStateManager >(it->second);
     }
 
     void map_peers(std::map< nuraft_mesg::peer_id_t, std::string > const& peers) {
@@ -84,11 +84,11 @@ public:
 
     void start(bool data_svc_enabled = false) {
         data_svc_ = data_svc_enabled;
-        auto params = Manager::Params();
-        params.server_uuid_ = id_;
-        params.mesg_port_ = port_;
-        params.default_group_type_ = "test_type";
-        instance_ = init_messaging(params, weak_from_this(), data_svc_enabled);
+        auto params = DCSManager::Params();
+        params.server_uuid = id_;
+        params.mesg_port = port_;
+        params.default_group_type = "test_type";
+        instance_ = init_dcs(params, weak_from_this(), data_svc_enabled);
         auto r_params = nuraft::raft_params()
                             .with_election_timeout_lower(elect_to_low)
                             .with_election_timeout_upper(elect_to_high)

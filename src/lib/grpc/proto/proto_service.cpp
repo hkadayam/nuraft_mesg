@@ -5,8 +5,8 @@
 #include <libnuraft/rpc_listener.hxx>
 #include <sisl/options/options.h>
 
-#include "nuraft_mesg/mesg_factory.hpp"
-#include "nuraft_mesg/nuraft_mesg.hpp"
+#include "nuraft_mesg/client_factory.hpp"
+#include "nuraft_mesg/nuraft_dcs.hpp"
 
 #include "lib/service.hpp"
 
@@ -42,11 +42,11 @@ static RCResponse* fromRCResponse(nuraft::resp_msg& rcmsg) {
     return req;
 }
 
-class proto_service : public msg_service {
+class DCSServiceProtob : public DCSService {
     ::grpc::Status step(nuraft::raft_server& server, const RaftMessage& request, RaftMessage& reply);
 
 public:
-    using msg_service::msg_service;
+    using DCSService::DCSService;
     void associate(sisl::GrpcServer* server) override;
     void bind(sisl::GrpcServer* server) override;
 
@@ -54,25 +54,25 @@ public:
     bool raftStep(const sisl::AsyncRpcDataPtr< Messaging, RaftGroupMsg, RaftGroupMsg >& rpc_data);
 };
 
-void proto_service::associate(::sisl::GrpcServer* server) {
-    msg_service::associate(server);
+void DCSServiceProtob::associate(::sisl::GrpcServer* server) {
+    DCSService::associate(server);
     if (!server->register_async_service< Messaging >()) {
         LOGE("Could not register RaftSvc with gRPC!");
         abort();
     }
 }
 
-void proto_service::bind(::sisl::GrpcServer* server) {
-    msg_service::bind(server);
+void DCSServiceProtob::bind(::sisl::GrpcServer* server) {
+    DCSService::bind(server);
     if (!server->register_rpc< Messaging, RaftGroupMsg, RaftGroupMsg, false >(
             "RaftStep", &Messaging::AsyncService::RequestRaftStep,
-            std::bind(&proto_service::raftStep, this, std::placeholders::_1))) {
+            std::bind(&DCSServiceProtob::raftStep, this, std::placeholders::_1))) {
         LOGE("Could not bind gRPC ::RaftStep to routine!");
         abort();
     }
 }
 
-::grpc::Status proto_service::step(nuraft::raft_server& server, const RaftMessage& request, RaftMessage& reply) {
+::grpc::Status DCSServiceProtob::step(nuraft::raft_server& server, const RaftMessage& request, RaftMessage& reply) {
     LOGT("Stepping [{}] from: [{}] to: [{}]", nuraft::msg_type_to_string(nuraft::msg_type(request.base().type())),
          request.base().src(), request.base().dest());
     auto rcreq = toRequest(request);
@@ -88,7 +88,7 @@ void proto_service::bind(::sisl::GrpcServer* server) {
     return ::grpc::Status();
 }
 
-bool proto_service::raftStep(const sisl::AsyncRpcDataPtr< Messaging, RaftGroupMsg, RaftGroupMsg >& rpc_data) {
+bool DCSServiceProtob::raftStep(const sisl::AsyncRpcDataPtr< Messaging, RaftGroupMsg, RaftGroupMsg >& rpc_data) {
     auto& request = rpc_data->request();
     auto& response = rpc_data->response();
     auto const& group_id = request.group_id();
@@ -108,12 +108,12 @@ bool proto_service::raftStep(const sisl::AsyncRpcDataPtr< Messaging, RaftGroupMs
 
     // Verify this is for the service it was intended for
     auto const& base = request.msg().base();
-    if (sid != _service_address) {
+    if (sid != service_address_) {
         LOGW("Recieved mesg for {} intended for {}, we are {}",
-             nuraft::msg_type_to_string(nuraft::msg_type(base.type())), intended_addr, _service_address);
+             nuraft::msg_type_to_string(nuraft::msg_type(base.type())), intended_addr, service_address_);
         rpc_data->set_status(::grpc::Status(
             ::grpc::INVALID_ARGUMENT,
-            fmt::format(FMT_STRING("intended addr: [{}], our addr: [{}]"), intended_addr, _service_address)));
+            fmt::format(FMT_STRING("intended addr: [{}], our addr: [{}]"), intended_addr, service_address_)));
         return true;
     }
 
@@ -122,13 +122,13 @@ bool proto_service::raftStep(const sisl::AsyncRpcDataPtr< Messaging, RaftGroupMs
 
     // JoinClusterRequests are expected to be received upon Cluster creation by the current leader. We need
     // to initialize a RaftServer context based on the corresponding type prior to servicing this request. This
-    // should emplace a corresponding server in the _raft_servers member.
+    // should emplace a corresponding server in the raft_servers_ member.
     if (nuraft::join_cluster_request == base.type()) { joinRaftGroup(base.dest(), gid, request.group_type()); }
 
     // Setup our response and process the request.
     response.set_group_id(group_id);
-    if (auto it = _raft_servers.find(gid); _raft_servers.end() != it) {
-        if (it->second.m_metrics) COUNTER_INCREMENT(*it->second.m_metrics, group_steps, 1);
+    if (auto it = raft_servers_.find(gid); raft_servers_.end() != it) {
+        COUNTER_INCREMENT(it->second.metrics_, group_steps, 1);
         try {
             rpc_data->set_status(step(*it->second.m_server->raft_server(), request.msg(), *response.mutable_msg()));
             return true;
@@ -140,11 +140,11 @@ bool proto_service::raftStep(const sisl::AsyncRpcDataPtr< Messaging, RaftGroupMs
     return true;
 }
 
-std::shared_ptr< msg_service > msg_service::create(std::shared_ptr< ManagerImpl > const& manager,
-                                                   group_id_t const& service_address,
-                                                   std::string const& default_group_type,
-                                                   bool const enable_data_service) {
-    return std::make_shared< proto_service >(manager, service_address, default_group_type, enable_data_service);
+std::shared_ptr< DCSService > DCSService::create(std::shared_ptr< DCSManagerImpl > const& manager,
+                                                 group_id_t const& service_address,
+                                                 std::string const& default_group_type,
+                                                 bool const enable_data_channel) {
+    return std::make_shared< DCSServiceProtob >(manager, service_address, default_group_type, enable_data_channel);
 }
 
 } // namespace nuraft_mesg

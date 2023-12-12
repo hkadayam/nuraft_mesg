@@ -16,7 +16,7 @@
 #include <sisl/fds/buffer.hpp>
 
 // Brief:
-//   grpc_client does the protobuf transformations on nuraft req's
+//   RaftClientGrpc does the protobuf transformations on nuraft req's
 //
 #include "flatb_client.hpp"
 #include "utils.hpp"
@@ -58,11 +58,11 @@ inline std::shared_ptr< nuraft::resp_msg > toResponse(Response const& resp) {
     return message;
 }
 
-std::atomic_uint64_t grpc_base_client::_client_counter = 0ul;
+std::atomic_uint64_t RaftClientGrpcBase::_client_counter = 0ul;
 
-void grpc_base_client::send(std::shared_ptr< nuraft::req_msg >& req, nuraft::rpc_handler& complete, uint64_t) {
+void RaftClientGrpcBase::send(std::shared_ptr< nuraft::req_msg >& req, nuraft::rpc_handler& complete, uint64_t) {
     assert(req && complete);
-    static_cast< grpc_flatb_client* >(this)->send(
+    static_cast< RaftGrpcClientFlatb* >(this)->send(
         fromRequest(*req), [req, complete](Response& response, ::grpc::Status& status) mutable -> void {
             std::shared_ptr< nuraft::rpc_exception > err;
             std::shared_ptr< nuraft::resp_msg > resp;

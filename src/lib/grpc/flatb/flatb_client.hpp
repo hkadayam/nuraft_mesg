@@ -13,16 +13,29 @@
  *
  *********************************************************************************/
 
-syntax = "proto3";
+// Brief:
+//   Implements cornerstone's rpc_client::send(...) routine to translate
+// and execute the call over gRPC asynchrously.
+//
+#pragma once
 
-import "raft_types.proto";
+#include "lib/client.hpp"
 
-package nuraft_mesg;
-
-message RaftGroupMsg {
-    string                  group_id            = 1;
-    RaftMessage             msg                 = 2;
-    string                  intended_addr       = 3;
-    string                  group_type          = 4;
+namespace flatbuffers {
+template < typename T >
+class Offset;
 }
-service Messaging { rpc RaftStep(RaftGroupMsg) returns (RaftGroupMsg); }
+
+namespace nuraft_mesg {
+
+class Request;
+class Response;
+
+class RaftGrpcClientFlatb : public RaftClientGrpcBase {
+public:
+    using handle_resp = std::function< void(Response&, ::grpc::Status&) >;
+    using RaftClientGrpcBase::RaftClientGrpcBase;
+    virtual void send(flatbuffers::Offset< Request > const& request, handle_resp complete) = 0;
+};
+
+} // namespace nuraft_mesg

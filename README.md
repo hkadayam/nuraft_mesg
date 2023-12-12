@@ -4,10 +4,12 @@
 
 ## Brief
 
-A multi-group service layer for [nuraft](https://github.com/eBay/nuraft)
+A multi-group data consensus service layer for [nuraft](https://github.com/eBay/nuraft)
 
 Provides a middleware to nuRaft which manages multple NuRaft servers all multiplex'd through a single server instance
-and cache'd client pairs.
+and cache'd client pairs. It also provides a separate channel between these Raft Servers to exchange large data. 
+
+It is pluggable for different types of RPCs to communicate with Raft servers, both for NuRaft protocol and data channel. At present only GRPC is supported.
 
 ## Changes
 
@@ -15,8 +17,7 @@ See the [Changelog](CHANGELOG.md) for release information.
 
 ## Usage
 
-The `nuraft_mesg::Manager` provides a means to register means to instantiate `nuraft::state_manager`s. This is used
-whenever a group is directly created (`Manager::create_group(...)` ) or when the `grpc::Service` receives a
+The `nuraft_mesg::DCSManager` provides a means to register means to instantiate `nuraft::state_manager`s. This is used whenever a group is directly created (`DCSManager::create_group(...)` ) or when the `grpc::Service` receives a
 `RaftMessage` indicating a request to join a group which one does not already belong.
 
 Routing of messages is handled by this library and uses a `global` thread pool for `nuraft::raft_server` bg threads.
@@ -26,7 +27,7 @@ You must still provide the following:
 
 * `nuraft::state_machine`: Provides hooks to implement `commit()`, `snapshot()`, `rollback()` etc.
 * `nuraft::log_store`: Logstore (e.g. [Jungle](https://github.com/eBay/Jungle) or [Homestore](https://github.com/ebay/Homestore)).
-* `nuraft_mesg::mesg_state_mgr`: RAFT state persistence. Loads/Stores state for the state_machine, snapshots etc.
+* `nuraft_mesg::DCSStateManager`: RAFT state persistence. Loads/Stores state for the state_machine, snapshots etc.
 
 A simple echo server and client can be found in `test_package/example_{client,server}.cpp`
 

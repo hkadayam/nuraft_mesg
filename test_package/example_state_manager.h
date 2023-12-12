@@ -1,9 +1,9 @@
 #pragma once
 
-#include <nuraft_mesg/mesg_state_mgr.hpp>
+#include <nuraft_mesg/dcs_state_mgr.hpp>
 #include <sisl/logging/logging.h>
 
-class simple_state_mgr : public nuraft_mesg::mesg_state_mgr {
+class simple_state_mgr : public nuraft_mesg::DCSStateManager {
 public:
     simple_state_mgr(int32_t srv_id, nuraft_mesg::peer_id_t const& srv_addr, nuraft_mesg::group_id_t const& group_id);
 
@@ -12,7 +12,7 @@ public:
     void save_state(const nuraft::srv_state& state) override;
     nuraft::ptr< nuraft::srv_state > read_state() override;
     nuraft::ptr< nuraft::log_store > load_log_store() override;
-    int32_t server_id() override { return _srv_id; }
+    int32_t server_id() override { return srv_id_; }
 
     void system_exit(const int exit_code) override { LOGINFO("System exiting with code [{}]", exit_code); }
 
@@ -22,7 +22,7 @@ public:
     void permanent_destroy() override;
 
 private:
-    int32_t const _srv_id;
+    int32_t const srv_id_;
     std::string const _srv_addr;
     std::string const _group_id;
 };

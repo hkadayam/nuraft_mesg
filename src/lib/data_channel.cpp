@@ -5,11 +5,16 @@
 #include <sisl/grpc/generic_service.hpp>
 #include <libnuraft/cluster_config.hxx>
 
-#include "nuraft_mesg/mesg_factory.hpp"
+#include "nuraft_mesg/client_factory.hpp"
 #include "grpc_server.hpp"
 #include "common_lib.hpp"
 
 namespace nuraft_mesg {
+
+void DataChannel::on_group_changed(peer_id_t const& peer_id) {
+    std::unique_lock lg{peer_mtx_};
+    clients_.insert_or_assign(peer_id, factory_->create_get_client(peer_id));
+}
 
 // The endpoint field of the raft_server config is the uuid of the server.
 const std::string repl_service_ctx_grpc::id_to_str(int32_t const id) const {
@@ -71,7 +76,8 @@ void repl_service_ctx::get_cluster_config(std::list< replica_config >& cluster_c
     }
 }
 
-repl_service_ctx_grpc::repl_service_ctx_grpc(grpc_server* server, std::shared_ptr< mesg_factory > const& cli_factory) :
+repl_service_ctx_grpc::repl_service_ctx_grpc(RaftGroupServer* server,
+                                             std::shared_ptr< mesg_factory > const& cli_factory) :
         repl_service_ctx(server ? server->raft_server().get() : nullptr), m_mesg_factory(cli_factory) {}
 
 void repl_service_ctx_grpc::send_data_service_response(io_blob_list_t const& outgoing_buf,

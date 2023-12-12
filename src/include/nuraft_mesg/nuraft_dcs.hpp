@@ -18,11 +18,12 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <chrono>
 
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 #include <libnuraft/raft_params.hxx>
 
-#include "common.hpp"
+#include <nuraft_mesg/common.hpp>
 
 namespace grpc {
 class ByteBuffer;
@@ -42,50 +43,59 @@ class GrpcTokenClient;
 
 namespace nuraft_mesg {
 
-class mesg_state_mgr;
+class DCSStateManager;
 
 // called by the server after it receives the request
-using data_service_request_handler_t = std::function< void(boost::intrusive_ptr< sisl::GenericRpcData >& rpc_data) >;
+using data_channel_request_handler_t = sisl::generic_rpc_handler_cb_t;
 
-class MessagingApplication {
+class DCSApplication {
 public:
-    virtual ~MessagingApplication() = default;
+    virtual ~DCSApplication() = default;
     virtual std::string lookup_peer(peer_id_t const&) = 0;
-    virtual std::shared_ptr< mesg_state_mgr > create_state_mgr(int32_t const srv_id, group_id_t const& group_id) = 0;
+    virtual shared< DCSStateManager > create_state_mgr(int32_t const srv_id, group_id_t const& group_id) = 0;
 };
 
-class Manager {
+class DCSManager {
 public:
     struct Params {
-        boost::uuids::uuid server_uuid_;
-        uint16_t mesg_port_;
-        group_type_t default_group_type_;
-        std::string ssl_key_;
-        std::string ssl_cert_;
-        std::shared_ptr< sisl::GrpcTokenVerifier > token_verifier_{nullptr};
-        std::shared_ptr< sisl::GrpcTokenClient > token_client_{nullptr};
+        enum rpc_impl_t : uint8_t { grpc, asio };
+
+        boost::uuids::uuid server_uuid;
+        uint16_t mesg_port;
+        group_type_t default_group_type;
+        std::string ssl_key;
+        std::string ssl_cert;
+        shared< sisl::GrpcTokenVerifier > token_verifier{nullptr};
+        shared< sisl::GrpcTokenClient > token_client{nullptr};
+        std::chrono::milliseconds leader_change_timeout_ms{3200};
+        uint32_t rpc_client_threads{1};
+        uint32_t rpc_server_threads{1};
+        rpc_impl_t raft_rpc_impl{rpc_impl_t::grpc};
+        rpc_impl_t data_rpc_impl{rpc_impl_t::grpc};
+        bool with_data_channel{false};
     };
+
     using group_params = nuraft::raft_params;
-    virtual ~Manager() = default;
+    virtual ~DCSManager() = default;
 
     // Register a new group type
     virtual void register_mgr_type(group_type_t const& group_type, group_params const&) = 0;
 
-    virtual std::shared_ptr< mesg_state_mgr > lookup_state_manager(group_id_t const& group_id) const = 0;
+    virtual shared< DCSStateManager > lookup_state_manager(group_id_t const& group_id) const = 0;
     virtual NullAsyncResult create_group(group_id_t const& group_id, group_type_t const& group_type) = 0;
     virtual NullResult join_group(group_id_t const& group_id, group_type_t const& group_type,
-                                  std::shared_ptr< mesg_state_mgr >) = 0;
+                                  shared< DCSStateManager >) = 0;
 
     // Send a client request to the cluster
     virtual NullAsyncResult add_member(group_id_t const& group_id, peer_id_t const& server_id) = 0;
     virtual NullAsyncResult rem_member(group_id_t const& group_id, peer_id_t const& server_id) = 0;
     virtual NullAsyncResult become_leader(group_id_t const& group_id) = 0;
     virtual NullAsyncResult append_entries(group_id_t const& group_id,
-                                           std::vector< std::shared_ptr< nuraft::buffer > > const&) = 0;
+                                           std::vector< shared< nuraft::buffer > > const&) = 0;
 
     // Misc Mgmt
     virtual void get_srv_config_all(group_id_t const& group_id,
-                                    std::vector< std::shared_ptr< nuraft::srv_config > >& configs_out) = 0;
+                                    std::vector< shared< nuraft::srv_config > >& configs_out) = 0;
     virtual void leave_group(group_id_t const& group_id) = 0;
     virtual void append_peers(group_id_t const& group_id, std::list< peer_id_t >&) const = 0;
     virtual uint32_t logstore_id(group_id_t const& group_id) const = 0;
@@ -93,13 +103,13 @@ public:
     virtual void restart_server() = 0;
 
     // data channel APIs
-    virtual bool bind_data_service_request(std::string const& request_name, group_id_t const& group_id,
-                                           data_service_request_handler_t const&) = 0;
+    virtual bool bind_data_channel_request(std::string const& request_name, group_id_t const& group_id,
+                                           data_channel_request_handler_t const&) = 0;
 };
 
 extern int32_t to_server_id(peer_id_t const& server_addr);
 
-extern std::shared_ptr< Manager > init_messaging(Manager::Params const&, std::weak_ptr< MessagingApplication >,
-                                                 bool with_data_svc = false);
+extern shared< DCSManager > init_dcs(DCSManager::Params const&, std::weak_ptr< DCSApplication >,
+                                     bool with_data_svc = false);
 
 } // namespace nuraft_mesg

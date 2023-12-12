@@ -1,16 +1,14 @@
 cmake_minimum_required(VERSION 3.11)
 
-#add_subdirectory (grpc)
-
-add_library(${PROJECT_NAME})
-target_sources(${PROJECT_NAME} PRIVATE
+add_library(${PROJECT_NAME}-grpc)
+target_sources(${PROJECT_NAME}-grpc PRIVATE
    manager_impl.cpp
-   service.cpp
    factory.cpp
-   group_factory.cpp
-   group_server.cpp
+   repl_service_ctx.cpp
+   service.cpp
+   grpc_server.cpp
 )
-target_link_libraries(${PROJECT_NAME}
+target_link_libraries(${PROJECT_NAME}-grpc
    sisl::sisl
    nuraft::nuraft
 )

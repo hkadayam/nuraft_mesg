@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -35,6 +36,24 @@ using NullAsyncResult = AsyncResult< folly::Unit >;
 
 ENUM(role_regex, uint8_t, LEADER, FOLLOWER, ALL, ANY);
 using destination_t = std::variant< peer_id_t, role_regex >;
+
+template < typename T >
+using shared = std::shared_ptr< T >;
+
+template < typename T >
+using cshared = const std::shared_ptr< T >;
+
+template < typename T >
+using unique = std::unique_ptr< T >;
+
+template < typename T >
+using weak = std::weak_ptr< T >;
+
+template < typename T >
+using intrusive = boost::intrusive_ptr< T >;
+
+template < typename T >
+using cintrusive = const boost::intrusive_ptr< T >;
 
 } // namespace nuraft_mesg
 

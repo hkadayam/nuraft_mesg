@@ -3,14 +3,14 @@
 #include <optional>
 #include <string>
 
-#include "nuraft_mesg/mesg_state_mgr.hpp"
-#include "nuraft_mesg/common.hpp"
+#include <nuraft_mesg/dcs_state_mgr.hpp>
+#include <nuraft_mesg/common.hpp>
 
 namespace nuraft_mesg {
 
 class repl_service_ctx_grpc : public repl_service_ctx {
 public:
-    repl_service_ctx_grpc(grpc_server* server, std::shared_ptr< mesg_factory > const& cli_factory);
+    repl_service_ctx_grpc(RaftGroupServer* server, std::shared_ptr< mesg_factory > const& cli_factory);
     ~repl_service_ctx_grpc() override = default;
     std::shared_ptr< mesg_factory > m_mesg_factory;
 

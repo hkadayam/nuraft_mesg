@@ -20,69 +20,50 @@
 #pragma once
 
 #include <libnuraft/nuraft.hxx>
-#include <sisl/grpc/rpc_client.hpp>
 #include <sisl/logging/logging.h>
 
 #include "lib/common_lib.hpp"
 
 namespace nuraft_mesg {
 
-class grpc_resp : public nuraft::resp_msg {
-public:
-    using nuraft::resp_msg::resp_msg;
-    ~grpc_resp() override = default;
+class DCSClient : public nuraft::rpc_client, std::enable_shared_from_this< DCSClient > {
+protected:
+    static std::atomic_uint64_t s_client_counter;
+    uint64_t client_id_;
+    std::string const addr_;
+    char const* worker_name_;
 
-    std::string dest_addr;
+public:
+    DCSClient(std::string const& worker_name, std::string const& addr) :
+            client_id_(s_client_counter++), addr_{addr}, worker_name_{worker_name} {}
+    virtual ~DCSClient() = default;
 };
 
-class grpc_base_client : public nuraft::rpc_client {
-    static std::atomic_uint64_t _client_counter;
-    uint64_t _client_id;
+class GroupClient : public nuraft::rpc_client {
+    static std::atomic_uint64_t s_client_counter;
+    std::shared_ptr< DCSClient > nexus_client_;
+    uint64_t client_id_;
+    group_id_t const group_id_;
+    group_type_t const group_type_;
+    std::string const client_addr_;
 
 public:
-    grpc_base_client() : nuraft::rpc_client::rpc_client(), _client_id(_client_counter++) {}
-    ~grpc_base_client() override = default;
+    GroupClient(std::shared_ptr< DSCClient > dsc_client, peer_id_t const& client_addr, group_id_t const& grp_name,
+                group_type_t const& grp_type) :
+            nuraft::rpc_client::rpc_client(),
+            client_id_(s_client_counter++),
+            nexus_client_(client),
+            group_id_(grp_id),
+            group_type_(grp_type),
+            client_addr_(to_string(client_addr)) {}
 
-    void send(std::shared_ptr< nuraft::req_msg >& req, nuraft::rpc_handler& complete, uint64_t timeout_ms = 0) override;
+    ~GroupClient() override = default;
 
     bool is_abandoned() const override { return false; }
-    uint64_t get_id() const override { return _client_id; }
-};
+    uint64_t get_id() const override { return client_id_; }
 
-template < typename TSERVICE >
-class grpc_client : public grpc_base_client, public sisl::GrpcAsyncClient {
-public:
-    grpc_client(std::string const& worker_name, std::string const& addr,
-                const std::shared_ptr< sisl::GrpcTokenClient > token_client, std::string const& target_domain = "",
-                std::string const& ssl_cert = "") :
-            grpc_base_client(),
-            sisl::GrpcAsyncClient(addr, token_client, target_domain, ssl_cert),
-            _addr(addr),
-            _worker_name(worker_name.data()) {
-        init();
-    }
-
-    grpc_client(std::string const& worker_name, std::string const& addr, std::string const& target_domain = "",
-                std::string const& ssl_cert = "") :
-            grpc_client(worker_name, addr, nullptr, target_domain, ssl_cert) {}
-
-    ~grpc_client() override = default;
-
-    void init() override {
-        // Re-create channel only if current channel is busted.
-        if (_stub && is_connection_ready()) {
-            LOGD("Channel looks fine, re-using");
-            return;
-        }
-        LOGD("Client init ({}) to {}", (!!_stub ? "Again" : "First"), _addr);
-        sisl::GrpcAsyncClient::init();
-        _stub = sisl::GrpcAsyncClient::make_stub< TSERVICE >(_worker_name);
-    }
-
-protected:
-    std::string const _addr;
-    char const* _worker_name;
-    typename ::sisl::GrpcAsyncClient::AsyncStub< TSERVICE >::UPtr _stub;
+    std::shared_ptr< DCSClient > realClient() { return nexus_client_; }
+    void setClient(std::shared_ptr< DCSClient > new_client) { nexus_client_ = std::move(new_client); }
 };
 
 } // namespace nuraft_mesg

@@ -8,7 +8,7 @@
 #include <sisl/options/options.h>
 #include <sisl/grpc/rpc_client.hpp>
 #include <sisl/utility/thread_buffer.hpp>
-#include <nuraft_mesg/mesg_factory.hpp>
+#include <nuraft_mesg/client_factory.hpp>
 
 #include "uuids.h"
 
@@ -21,7 +21,7 @@ SISL_OPTION_GROUP(client, (add, "a", "add", "Add a server to the cluster", cxxop
                   (remove, "r", "remove", "Remove server from cluster", cxxopts::value< uint32_t >(), "id"))
 
 SISL_OPTIONS_ENABLE(logging, client)
-SISL_LOGGING_INIT(nuraft, nuraft_mesg, httpserver_lmod, grpc_server)
+SISL_LOGGING_INIT(nuraft, nuraft_mesg, httpserver_lmod, RaftGroupServer)
 
 void cleanup(const std::string& prefix) { auto r = system(fmt::format(FMT_STRING("rm -rf {}"), prefix).data()); }
 

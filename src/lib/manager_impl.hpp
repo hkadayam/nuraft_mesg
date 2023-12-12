@@ -19,80 +19,74 @@
 #include <memory>
 #include <mutex>
 
-#include "nuraft_mesg/nuraft_mesg.hpp"
-#include "nuraft_mesg/mesg_factory.hpp"
 #include <sisl/logging/logging.h>
 #include <libnuraft/nuraft.hxx>
 
+#include <nuraft_mesg/nuraft_dcs.hpp>
+#include <nuraft_mesg/client_factory.hpp>
 #include "common_lib.hpp"
 
-namespace sisl {
-class GrpcServer;
-} // namespace sisl
-
 namespace nuraft_mesg {
-class group_factory;
-class msg_service;
-class group_metrics;
+class DCSService;
 
-class ManagerImpl : public Manager, public std::enable_shared_from_this< ManagerImpl > {
-    Manager::Params start_params_;
-    int32_t _srv_id;
+class DCSManagerImpl : public DCSManager, public std::enable_shared_from_this< DCSManagerImpl > {
+    DCSManager::Params start_params_;
+    int32_t srv_id_;
 
-    std::map< group_type_t, Manager::group_params > _state_mgr_types;
+    std::map< group_type_t, DCSManager::group_params > state_mgr_types_;
 
-    std::weak_ptr< MessagingApplication > application_;
-    std::shared_ptr< group_factory > _g_factory;
+    weak< DCSApplication > application_;
+    shared< ClientFactory > data_channel_factory_;
 
     // Protected
-    std::mutex mutable _manager_lock;
-    std::shared_ptr< msg_service > _mesg_service;
-    std::unique_ptr< ::sisl::GrpcServer > _grpc_server;
-    std::map< group_id_t, std::shared_ptr< mesg_state_mgr > > _state_managers;
-    std::condition_variable _config_change;
-    std::map< group_id_t, bool > _is_leader;
+    std::mutex mutable manager_lock_;
+    shared< DCSRaftService > raft_service_;
+    shared< DCSDataService > data_service_;
+    std::map< group_id_t, shared< DCSStateManager > > state_managers_;
+    std::condition_variable config_change_;
+    std::map< group_id_t, bool > is_leader_;
     //
 
-    nuraft::ptr< nuraft::delayed_task_scheduler > _scheduler;
-    std::shared_ptr< sisl::logging::logger_t > _custom_logger;
+    nuraft::ptr< nuraft::delayed_task_scheduler > scheduler_;
+    shared< sisl::logging::logger_t > custom_logger_;
 
     void raft_event(group_id_t const& group_id, nuraft::cb_func::Type type, nuraft::cb_func::Param* param);
     void exit_group(group_id_t const& group_id);
 
 public:
-    ManagerImpl(Manager::Params const&, std::weak_ptr< MessagingApplication >);
-    ~ManagerImpl() override;
+    DCSManagerImpl(DCSManager::Params const&, weak< DCSApplication >);
+    ~DCSManagerImpl() override;
 
     // Public API
     void register_mgr_type(group_type_t const& group_type, group_params const&) override;
 
-    std::shared_ptr< mesg_state_mgr > lookup_state_manager(group_id_t const& group_id) const override;
+    shared< DCSStateManager > lookup_state_manager(group_id_t const& group_id) const override;
     NullAsyncResult create_group(group_id_t const& group_id, group_type_t const& group_type) override;
     NullResult join_group(group_id_t const& group_id, group_type_t const& group_type,
-                          std::shared_ptr< mesg_state_mgr > smgr) override;
+                          shared< DCSStateManager > smgr) override;
 
     NullAsyncResult add_member(group_id_t const& group_id, peer_id_t const& server_id) override;
     NullAsyncResult rem_member(group_id_t const& group_id, peer_id_t const& server_id) override;
     NullAsyncResult become_leader(group_id_t const& group_id) override;
-    NullAsyncResult append_entries(group_id_t const& group_id,
-                                   std::vector< std::shared_ptr< nuraft::buffer > > const&) override;
+    NullAsyncResult append_entries(group_id_t const& group_id, std::vector< shared< nuraft::buffer > > const&) override;
 
     void get_srv_config_all(group_id_t const& group_id,
-                            std::vector< std::shared_ptr< nuraft::srv_config > >& configs_out) override;
+                            std::vector< shared< nuraft::srv_config > >& configs_out) override;
     void leave_group(group_id_t const& group_id) override;
     void append_peers(group_id_t const& group_id, std::list< peer_id_t >&) const override;
     uint32_t logstore_id(group_id_t const& group_id) const override;
-    int32_t server_id() const override { return _srv_id; }
+    int32_t server_id() const override { return srv_id_; }
     void restart_server() override;
 
-    bool bind_data_service_request(std::string const& request_name, group_id_t const& group_id,
-                                   data_service_request_handler_t const& request_handler) override;
+    bool bind_data_channel_request(std::string const& request_name, group_id_t const& group_id,
+                                   data_channel_request_handler_t const& request_handler) override;
     //
 
     /// Internal API
     nuraft::cmd_result_code group_init(int32_t const srv_id, group_id_t const& group_id, group_type_t const& group_type,
-                                       nuraft::context*& ctx, std::shared_ptr< group_metrics > metrics);
+                                       bool with_data_channel, nuraft::context*& ctx);
     void start(bool and_data_svc);
+    weak< DCSApplication > application() { return application_; }
     //
 };
 

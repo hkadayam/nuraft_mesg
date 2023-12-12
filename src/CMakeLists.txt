@@ -8,8 +8,5 @@ include_directories(BEFORE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DI
 
 add_flags("-Wall -Wextra -Werror -Wpedantic")
 
-add_subdirectory (proto)
-add_subdirectory (flatb)
-
 add_subdirectory (lib)
 add_subdirectory(tests)
