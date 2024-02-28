@@ -22,10 +22,9 @@ private:
     shared< sisl::GrpcServer > grpc_server_;
 
 public:
-    DCSRaftServiceGrpc(std::shared_ptr< DCSManagerImpl > const& manager, group_id_t const& service_address,
-                       std::string const& default_group_type);
-    void start(DCSManager::Params const& params) override;
-    void shutdown override();
+    DCSRaftServiceGrpc(shared< DCSManagerImpl > manager, DCSManager::Params const& params);
+    void start() override;
+    void shutdown() override;
 
     shared< sisl::GrpcServer > server() { return grpc_server_; }
 };
@@ -33,17 +32,20 @@ public:
 class DCSDataServiceGrpc : public DCSDataService {
 private:
     shared< sisl::GrpcServer > grpc_server_;
-    std::unordered_map< std::string, sisl::generic_rpc_handler_cb_t > request_map_;
-    data_lock_type req_lock_;
+    std::unordered_map< channel_id_t, shared< DataChannel >, uuid_hasher > channel_map_;
+    folly::SharedMutex map_lock_;
 
 public:
-    DCSDataServiceGrpc();
-    void start();
-    void shutdown();
-    bool bind_request(std::string const& request_name, group_id_t const& group_id,
-                      data_channel_request_handler_t const& request_handler) override;
+    DCSDataServiceGrpc(shared< DCSManagerImpl > manager, DCSManager::Params const& params,
+                       shared< DCSRaftServiceGrpc > raft_service);
+    void start() override;
+    void shutdown() override;
+    shared< DataChannel > create_data_channel(channel_id_t const& channel_id);
+    void remove_data_channel(channel_id_t const& channel_id) override;
+    rpc_id_t register_rpc(std::string const& rpc_name, group_id_t const& group_id,
+                          data_channel_rpc_handler_t const& handler) override;
 
 private:
-    void rebind_requests();
+    void reregister_rpcs();
 };
 } // namespace nuraft_mesg

@@ -43,7 +43,6 @@ struct client_ctx {
             promise_.setValue(folly::makeUnexpected(code));
     }
 
-private:
     int32_t cur_dest_;
     peer_id_t const new_srv_addr_;
 
@@ -105,10 +104,10 @@ void respHandler(shared< ContextType > ctx, shared< nuraft::resp_msg >& rsp, sha
     }
 
     // Not accepted: means that `get_dst()` is a new leader.
-    auto gresp = std::dynamic_pointer_cast< raft_resp >(rsp);
-    LOGD("Updating destination from {} to {}[{}]", ctx->cur_dest_, rsp->get_dst(), gresp->dest_addr);
+    auto dresp = std::dynamic_pointer_cast< dcs_raft_resp >(rsp);
+    LOGD("Updating destination from {} to {}[{}]", ctx->cur_dest_, rsp->get_dst(), dresp->dest_addr);
     ctx->cur_dest_ = rsp->get_dst();
-    auto client = factory->create_get_raft_client(gresp->dest_addr);
+    auto client = factory->create_get_client(dresp->dest_addr);
 
     // We'll try again by forwarding the message
     auto handler = static_cast< nuraft::rpc_handler >(
@@ -137,7 +136,7 @@ shared< DCSClient > ClientFactory::create_get_client(std::string const& client) 
 shared< DCSClient > ClientFactory::create_get_client(peer_id_t const& client) {
     shared< DCSClient > new_client;
 
-    std::unique_lock< client_factory_lock_type > lk(_client_lock);
+    std::unique_lock< client_factory_lock_type > lk(client_lock_);
     auto [it, happened] = dcs_clients_.emplace(client, nullptr);
     if (dcs_clients_.end() != it) {
         if (!happened) {
@@ -145,22 +144,17 @@ shared< DCSClient > ClientFactory::create_get_client(peer_id_t const& client) {
             if (auto err = reinit_client(client, it->second); err == nuraft::OK) { new_client = it->second; }
         } else {
             LOGD("Creating client for {}", client);
-            if (auto err = _create_raft_client(client, it->second); nuraft::OK == err) { new_client = it->second; }
+            if (auto err = _create_client(client, it->second); nuraft::OK == err) { new_client = it->second; }
         }
         if (!it->second) { dcs_clients_.erase(it); }
     }
     return new_client;
 }
 
-nuraft::cmd_result_code ClientFactory::reinit_raft_client(peer_id_t const& client,
-                                                          shared< nuraft::rpc_client >& raft_client) {
+nuraft::cmd_result_code ClientFactory::reinit_client(peer_id_t const& client, shared< DCSClient >& dcs_client) {
     LOGD("Re-init client to {}", client);
-    assert(raft_client);
-    auto mesg_client = std::dynamic_pointer_cast< DSCClient >(raft_client);
-    if (!mesg_client->is_connection_ready() || 0 < mesg_client->bad_service.load(std::memory_order_relaxed)) {
-        return _create_client(client, raft_client);
-    }
-    return nuraft::OK;
+    assert(dcs_client);
+    return _reinit_client(client, dcs_client);
 }
 
 NullAsyncResult ClientFactory::add_server(uint32_t srv_id, peer_id_t const& srv_addr,
@@ -178,7 +172,7 @@ NullAsyncResult ClientFactory::add_server(uint32_t srv_id, peer_id_t const& srv_
 }
 
 NullAsyncResult ClientFactory::rem_server(uint32_t srv_id, nuraft::srv_config const& dest_cfg) {
-    auto client = create_get_raft_client(dest_cfg.get_endpoint());
+    auto client = create_get_client(dest_cfg.get_endpoint());
     if (!client) { return folly::makeUnexpected(nuraft::CANCELLED); }
 
     auto ctx = std::make_shared< client_ctx< int32_t > >(srv_id, shared_from_this(), dest_cfg.get_id());
@@ -191,7 +185,7 @@ NullAsyncResult ClientFactory::rem_server(uint32_t srv_id, nuraft::srv_config co
 }
 
 NullAsyncResult ClientFactory::append_entry(shared< nuraft::buffer > buf, nuraft::srv_config const& dest_cfg) {
-    auto client = create_get_raft_client(dest_cfg.get_endpoint());
+    auto client = create_get_client(dest_cfg.get_endpoint());
     if (!client) { return folly::makeUnexpected(nuraft::CANCELLED); }
 
     auto ctx = std::make_shared< client_ctx< shared< nuraft::buffer > > >(buf, shared_from_this(), dest_cfg.get_id());

@@ -27,7 +27,9 @@
 #include "common_lib.hpp"
 
 namespace nuraft_mesg {
-class DCSService;
+class DCSRaftService;
+class DCSDataService;
+class DCSStateManager;
 
 class DCSManagerImpl : public DCSManager, public std::enable_shared_from_this< DCSManagerImpl > {
     DCSManager::Params start_params_;
@@ -36,7 +38,6 @@ class DCSManagerImpl : public DCSManager, public std::enable_shared_from_this< D
     std::map< group_type_t, DCSManager::group_params > state_mgr_types_;
 
     weak< DCSApplication > application_;
-    shared< ClientFactory > data_channel_factory_;
 
     // Protected
     std::mutex mutable manager_lock_;
@@ -59,6 +60,8 @@ public:
 
     // Public API
     void register_mgr_type(group_type_t const& group_type, group_params const&) override;
+    void start() override;
+    void restart_server() override;
 
     shared< DCSStateManager > lookup_state_manager(group_id_t const& group_id) const override;
     NullAsyncResult create_group(group_id_t const& group_id, group_type_t const& group_type) override;
@@ -76,15 +79,14 @@ public:
     void append_peers(group_id_t const& group_id, std::list< peer_id_t >&) const override;
     uint32_t logstore_id(group_id_t const& group_id) const override;
     int32_t server_id() const override { return srv_id_; }
-    void restart_server() override;
 
-    bool bind_data_channel_request(std::string const& request_name, group_id_t const& group_id,
-                                   data_channel_request_handler_t const& request_handler) override;
+    rpc_id_t register_data_channel_rpc(std::string const& request_name, group_id_t const& group_id,
+                                       data_channel_rpc_handler_t const& request_handler) override;
     //
 
     /// Internal API
     nuraft::cmd_result_code group_init(int32_t const srv_id, group_id_t const& group_id, group_type_t const& group_type,
-                                       bool with_data_channel, nuraft::context*& ctx);
+                                       nuraft::context*& ctx);
     void start(bool and_data_svc);
     weak< DCSApplication > application() { return application_; }
     //

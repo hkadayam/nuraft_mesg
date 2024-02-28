@@ -17,6 +17,7 @@
 #include <memory>
 #include <string>
 
+#include <sisl/auth_manager/token_client.hpp>
 #include <nuraft_mesg/client_factory.hpp>
 
 namespace nuraft_mesg {
@@ -26,12 +27,24 @@ protected:
     std::string ssl_cert; // TODO: Changed from static to member, should it be static???
 
 public:
-    ClientFactoryGrpc(uint32_t cli_thread_count, std::string const& name, weak< DCSApplication >& app,
+    ClientFactoryGrpc(uint32_t cli_thread_count, std::string const& name, weak< DCSApplication > app,
                       shared< sisl::GrpcTokenClient > token_client, std::string const& ssl_cert);
     virtual ~ClientFactoryGrpc() = default;
 
 protected:
-    nuraft::cmd_result_code _create_raft_client(peer_id_t const& client,
-                                                nuraft::ptr< nuraft::rpc_client >& raft_client) override;
+    nuraft::cmd_result_code _create_client(peer_id_t const& client, shared< DCSClient >& dcs_client) override;
+    nuraft::cmd_result_code _reinit_client(peer_id_t const& client, shared< DCSClient >&) override;
 };
+
+class GroupClientFactoryGrpc : public GroupClientFactory {
+public:
+    using GroupClientFactory::GroupClientFactory;
+    virtual ~GroupClientFactoryGrpc() = default;
+
+    nuraft::ptr< nuraft::rpc_client > create_client(std::string const& client_id) override;
+    nuraft::cmd_result_code create_client(peer_id_t const& client, nuraft::ptr< nuraft::rpc_client >& rpc_ptr) override;
+    nuraft::cmd_result_code reinit_client(peer_id_t const& client,
+                                          std::shared_ptr< nuraft::rpc_client >& raft_client) override;
+};
+
 } // namespace nuraft_mesg

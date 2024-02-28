@@ -32,7 +32,7 @@
 namespace nuraft_mesg {
 
 DCSRaftService::DCSRaftService(shared< DCSManagerImpl > const& manager, DCSManager::Params const& params) :
-        default_group_type(parms.default_group_type),
+        default_group_type(params.default_group_type),
         params_{params},
         manager_(manager),
         service_address_(params.server_uuid) {}
@@ -137,8 +137,8 @@ nuraft::cmd_result_code DCSRaftService::joinRaftGroup(int32_t const srv_id, grou
 
 void DCSRaftService::leave_group(group_id_t const& group_id) {
     if (auto it = raft_servers_.find(group_id); raft_servers_.end() != it) {
-        it->second.raft_server()->stop_server();
-        it->second.raft_server()->shutdown();
+        it->second->raft_server()->stop_server();
+        it->second->raft_server()->shutdown();
     } else {
         LOGW("Unknown [group={}] cannot part.", group_id);
     }
@@ -148,20 +148,8 @@ void DCSRaftService::shutdown() {
     LOGI("Data Consesus Service shutdown started.");
 
     for (auto& [_, v] : raft_servers_) {
-        v.raft_server()->stop_server();
-        v.raft_server()->shutdown();
+        v->raft_server()->stop_server();
+        v->raft_server()->shutdown();
     }
-}
-
-/////////////////////////////// DCSDataService Section ///////////////////////////////////////////
-DCSDataService::DCSDataService(shared< DCSRaftService > raft_svc) {}
-
-bool DCSDataService::bind_data_channel_request(std::string const& request_name, group_id_t const& group_id,
-                                               data_channel_request_handler_t const& request_handler) {
-    if (!data_channel_enabled_) {
-        LOGE("Could not register data service method {}; data service is null", request_name);
-        return false;
-    }
-    return data_channel_.bind(request_name, group_id, request_handler);
 }
 } // namespace nuraft_mesg

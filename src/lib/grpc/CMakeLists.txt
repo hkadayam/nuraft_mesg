@@ -1,24 +1,16 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.13)
 
-add_library(${PROJECT_NAME}-grpc)
-target_sources(${PROJECT_NAME}-grpc PRIVATE
-   manager_impl.cpp
-   factory.cpp
-   repl_service_ctx.cpp
-   service.cpp
-   grpc_server.cpp
-)
-target_link_libraries(${PROJECT_NAME}-grpc
-   sisl::sisl
-   nuraft::nuraft
-)
+#add_library(${PROJECT_NAME}-grpc)
 
-add_library(${PROJECT_NAME}-data-svc OBJECT)
-target_sources(${PROJECT_NAME}-data-svc PRIVATE
-   data_service_grpc.cpp
+add_library(${PROJECT_NAME}_grpc
+   client_grpc.cpp
+   service_grpc.cpp
+   factory_grpc.cpp
+   data_channel_grpc.cpp
 )
-settings_gen_cpp($<TARGET_FILE:flatbuffers::flatc> ${CMAKE_CURRENT_BINARY_DIR}/generated/ ${PROJECT_NAME}-data-svc nuraft_mesg_config.fbs)
-target_link_libraries(${PROJECT_NAME}-data-svc
-   sisl::sisl
-   nuraft::nuraft
-)
+add_subdirectory (proto)
+
+#target_link_libraries(${PROJECT_NAME}-grpc
+#   sisl::sisl
+#   nuraft::nuraft
+#)

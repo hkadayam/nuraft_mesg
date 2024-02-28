@@ -21,28 +21,22 @@
 
 #include <sisl/grpc/rpc_client.hpp>
 #include "lib/client.hpp"
+#include "messaging_service.grpc.pb.h"
 
 namespace nuraft_mesg {
-class RaftRespMesgGrpc : public nuraft::resp_msg {
-public:
-    using nuraft::resp_msg::resp_msg;
-    ~RaftRespMesgGrpc() override = default;
-
-    std::string dest_addr;
-};
-
 class DCSClientGrpc : public DCSClient, public sisl::GrpcAsyncClient {
 public:
     DCSClientGrpc(std::string const& worker_name, std::string const& addr,
                   const std::shared_ptr< sisl::GrpcTokenClient > token_client, std::string const& target_domain = "",
                   std::string const& ssl_cert = "");
 
-private:
     void init() override;
+    sisl::GrpcAsyncClient::GenericAsyncStub& generic_stub() { return *generic_stub_; }
+    bool is_connection_ready() const override { return sisl::GrpcAsyncClient::is_connection_ready(); }
 
 protected:
-    typename ::sisl::GrpcAsyncClient::AsyncStub< DCSMessaging >::UPtr stub_;
-    std::unique_ptr< ::sisl::GrpcAsyncClient::GenericAsyncStub > generic_stub_;
+    typename sisl::GrpcAsyncClient::AsyncStub< DCSMessaging >::UPtr stub_;
+    std::unique_ptr< sisl::GrpcAsyncClient::GenericAsyncStub > generic_stub_;
 };
 
 } // namespace nuraft_mesg

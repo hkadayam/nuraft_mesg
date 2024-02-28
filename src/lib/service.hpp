@@ -10,26 +10,30 @@
 #include <sisl/grpc/rpc_server.hpp>
 #include <sisl/metrics/metrics.hpp>
 
+#include <nuraft_mesg/dcs_state_mgr.hpp>
 #include "group_server.hpp"
 #include "manager_impl.hpp"
-// #include "data_service_grpc.hpp"
 
 /// This is for the ConcurrentHashMap
-namespace std {
+/*namespace std {
 template <>
 struct hash< boost::uuids::uuid > {
-    size_t operator()(const boost::uuids::uuid& uid) { return boost::hash< boost::uuids::uuid >()(uid); }
+    size_t operator()(const boost::uuids::uuid& uid) const noexcept { return boost::hash< boost::uuids::uuid >()(uid); }
 };
 } // namespace std
-
+*/
 namespace nuraft_mesg {
+
+struct uuid_hasher {
+    size_t operator()(const boost::uuids::uuid& uid) const { return boost::hash< boost::uuids::uuid >()(uid); }
+};
 
 class DCSRaftService : public nuraft::raft_server_handler, public std::enable_shared_from_this< DCSRaftService > {
 protected:
     std::string const default_group_type;
     DCSManager::Params params_;
     std::weak_ptr< DCSManagerImpl > manager_;
-    folly::ConcurrentHashMap< group_id_t, unique< RaftGroupServer > > raft_servers_;
+    folly::ConcurrentHashMap< group_id_t, unique< RaftGroupServer >, uuid_hasher > raft_servers_;
     peer_id_t const service_address_;
     shared< ClientFactory > factory_;
 
@@ -40,8 +44,8 @@ public:
     DCSRaftService& operator=(DCSRaftService const&) = delete;
 
     // Override the following for each serialization implementation
-    virtual void start(DCSManager::Params const& params) = 0;
-    void shutdown();
+    virtual void start() = 0;
+    virtual void shutdown();
 
     NullAsyncResult add_member(group_id_t const& group_id, nuraft::srv_config const& cfg);
     NullAsyncResult rem_member(group_id_t const& group_id, int const member_id);
@@ -56,6 +60,8 @@ public:
 
     // Internal intent only
     void shutdown_for(group_id_t const&);
+
+    shared< ClientFactory > client_factory() { return factory_; }
 };
 
 class DCSDataService {
@@ -63,9 +69,14 @@ protected:
     shared< ClientFactory > factory_;
 
 public:
-    DCSDataService(shared< DCSManagerImpl > manager, DCSManager::Params const& params);
-    virtual unique< DataChannel > create_data_channel() = 0;
-    virtual bool bind_request(std::string const& request_name, group_id_t const& group_id,
-                              data_channel_request_handler_t const& request_handler) = 0;
-}
+    DCSDataService() = default;
+    virtual void start() = 0;
+    virtual void shutdown() = 0;
+    virtual shared< DataChannel > create_data_channel(channel_id_t const& channel_id) = 0;
+    virtual void remove_data_channel(channel_id_t const& channel_id) = 0;
+    virtual rpc_id_t register_rpc(std::string const& rpc_name, group_id_t const& group_id,
+                                  data_channel_rpc_handler_t const& handler) = 0;
+
+    shared< ClientFactory > client_factory() { return factory_; }
+};
 } // namespace nuraft_mesg

@@ -2,6 +2,7 @@
 
 #include <libnuraft/raft_server_handler.hxx>
 #include <grpcpp/server.h>
+#include <nuraft_mesg/common.hpp>
 
 namespace sisl {
 class GrpcServer;
@@ -28,7 +29,7 @@ class RaftGroupServer {
     GroupMetrics metrics_;
 
 public:
-    explicit RaftGroupServer(std::shared_ptr< nuraft::raft_server >& raft_server, group_id_t const& group_id) :
+    RaftGroupServer(std::shared_ptr< nuraft::raft_server >& raft_server, group_id_t const& group_id) :
             raft_server_(raft_server), metrics_{group_id} {}
     virtual ~RaftGroupServer() = default;
     RaftGroupServer(const RaftGroupServer&) = delete;

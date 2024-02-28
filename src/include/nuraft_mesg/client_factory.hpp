@@ -33,7 +33,7 @@ class DCSClient;
 
 // Class to track a common ClientFactory one per application and it provides a common mechanism for multiple raft
 // groups to create clients. This class also acts a registry of all per group client factory created per peer.
-class ClientFactory {
+class ClientFactory : public std::enable_shared_from_this< ClientFactory > {
 protected:
     std::string worker_name_;
     std::weak_ptr< DCSApplication > application_;
@@ -42,7 +42,7 @@ protected:
     std::map< peer_id_t, std::shared_ptr< DCSClient > > dcs_clients_;
 
 public:
-    ClientFactory(std::string const& name, std::weak_ptr< DCSApplication >& app) :
+    ClientFactory(std::string const& name, std::weak_ptr< DCSApplication > app) :
             worker_name_{name}, application_{app} {}
 
     std::string const& worker_name() const { return worker_name_; }
@@ -63,6 +63,8 @@ public:
 
 protected:
     virtual nuraft::cmd_result_code _create_client(peer_id_t const& client, shared< DCSClient >& dcs_client) = 0;
+
+    virtual nuraft::cmd_result_code _reinit_client(peer_id_t const& client, shared< DCSClient >&) = 0;
 };
 
 using group_change_cb_t = std::function< void(peer_id_t const&, shared< DCSClient >) >;
@@ -71,6 +73,7 @@ using group_change_cb_t = std::function< void(peer_id_t const&, shared< DCSClien
 // one per RAFT group.
 class GroupClientFactory : public nuraft::rpc_client_factory,
                            public std::enable_shared_from_this< GroupClientFactory > {
+protected:
     shared< ClientFactory > common_factory_;
     group_id_t const group_id_;
     group_type_t const group_type_;
@@ -87,8 +90,9 @@ public:
 
     group_id_t group_id() const { return group_id_; }
 
-    nuraft::ptr< nuraft::rpc_client > create_client(const std::string& endpoint) override;
-    nuraft::cmd_result_code create_client(peer_id_t const& client, nuraft::ptr< nuraft::rpc_client >& rpc_ptr);
-    nuraft::cmd_result_code reinit_client(peer_id_t const& client, std::shared_ptr< nuraft::rpc_client >& raft_client);
+    virtual nuraft::cmd_result_code create_client(peer_id_t const& client,
+                                                  nuraft::ptr< nuraft::rpc_client >& rpc_ptr) = 0;
+    virtual nuraft::cmd_result_code reinit_client(peer_id_t const& client,
+                                                  std::shared_ptr< nuraft::rpc_client >& raft_client) = 0;
 };
 } // namespace nuraft_mesg

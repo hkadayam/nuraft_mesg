@@ -1,9 +1,11 @@
 #pragma once
 
 #include <sisl/logging/logging.h>
+#include <sisl/settings/settings.hpp>
 #include <grpcpp/generic/async_generic_service.h>
 
-#include "nuraft_mesg/common.hpp"
+#include <nuraft_mesg/common.hpp>
+#include "lib/generated/nuraft_mesg_config_generated.h"
 
 #define LOGT(...) LOGTRACEMOD(nuraft_mesg, ##__VA_ARGS__)
 #define LOGD(...) LOGDEBUGMOD(nuraft_mesg, ##__VA_ARGS__)
@@ -11,6 +13,14 @@
 #define LOGW(...) LOGWARNMOD(nuraft_mesg, ##__VA_ARGS__)
 #define LOGE(...) LOGERRORMOD(nuraft_mesg, ##__VA_ARGS__)
 #define LOGC(...) LOGCRITICALMOD(nuraft_mesg, ##__VA_ARGS__)
+
+SETTINGS_INIT(nuraftmesgcfg::NuraftMesgConfig, nuraft_mesg_config);
+
+#define NURAFT_MESG_CONFIG_WITH(...) SETTINGS(nuraft_mesg_config, __VA_ARGS__)
+#define NURAFT_MESG_CONFIG_THIS(...) SETTINGS_THIS(nuraft_mesg_config, __VA_ARGS__)
+#define NURAFT_MESG_CONFIG(...) SETTINGS_VALUE(nuraft_mesg_config, __VA_ARGS__)
+
+#define NURAFT_MESG_SETTINGS_FACTORY() SETTINGS_FACTORY(nuraft_mesg_config)
 
 namespace nuraft_mesg {
 

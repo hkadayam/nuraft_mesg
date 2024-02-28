@@ -19,8 +19,12 @@
 #include "manager_impl.hpp"
 // #include "repl_service_ctx.hpp"
 #include "lib/service.hpp"
+#include "lib/grpc/service_grpc.hpp"
 #include "lib/grpc/factory_grpc.hpp"
+#include "lib/grpc/data_channel_grpc.hpp"
 #include "lib/logger.hpp"
+
+SISL_LOGGING_DEF(nuraft_mesg)
 
 namespace nuraft_mesg {
 
@@ -63,11 +67,12 @@ void DCSManagerImpl::start() {
             RELEASE_ASSERT(false, "Only grpc implementation of Raft transport supported");
         }
     }
-    raft_service_->start();
+    raft_service_->start(start_params_);
 
     if (start_params_.with_data_channel && !data_service_) {
         if ((start_params_.data_rpc_impl == DCSManager::Params::rpc_impl_t::grpc)) {
-            data_service_ = std::make_shared< DCSDataServiceGrpc >(shared_from_this(), start_params_, raft_service_);
+            data_service_ = std::make_shared< DCSDataServiceGrpc >(
+                shared_from_this(), start_params_, std::static_pointer_cast< DCSRaftServiceGrpc >(raft_service_));
         } else {
             RELEASE_ASSERT(false, "Mixed rpc mode (for raft and data channels) is not supported yet");
         }
@@ -78,7 +83,7 @@ void DCSManagerImpl::start() {
 void DCSManagerImpl::restart_server() {
     std::lock_guard< std::mutex > lg(manager_lock_);
     RELEASE_ASSERT(raft_service_, "Need to call ::start() first!");
-    raft_service_->start();
+    raft_service_->start(start_params_);
     if (start_params_.with_data_channel) { data_service_->start(); }
 }
 
@@ -139,7 +144,12 @@ void DCSManagerImpl::exit_group(group_id_t const& group_id) {
     if (rg) rg->leave();
 }
 
-nuraft::cmd_result_code DCSManagerImpl::group_init(int32_t const srv_id, group_id_t const& group_id,
+void link_data_channel_to_group(shared< DCSStateManager > smgr, shared< DataChannel > dc) {
+    smgr->set_data_channel(dc);
+    dc->set_state_mgr(smgr.get());
+}
+
+nuraft::cmd_result_code DCSManagerImpl::group_init(int32_t srv_id, group_id_t const& group_id,
                                                    group_type_t const& group_type, nuraft::context*& ctx) {
     LOGD("Creating context for: [group_id={}] as Member: {}", group_id, srv_id);
 
@@ -147,8 +157,6 @@ nuraft::cmd_result_code DCSManagerImpl::group_init(int32_t const srv_id, group_i
     shared< nuraft::state_mgr > smgr;
     shared< nuraft::state_machine > sm;
     nuraft::raft_params params;
-
-    // Create Data channel if
 
     {
         std::lock_guard< std::mutex > lg(manager_lock_);
@@ -173,14 +181,22 @@ nuraft::cmd_result_code DCSManagerImpl::group_init(int32_t const srv_id, group_i
         }
     }
 
+    // Create one data channel per RAFT group
+    shared< DataChannel > dc;
+    if (start_params_.with_data_channel) {
+        dc = data_service_->create_data_channel(group_id);
+        link_data_channel_to_group(std::static_pointer_cast< DCSStateManager >(smgr), dc);
+    }
+
     // RAFT client factory
-    unique< DataChannel > dc;
-    if (start_params_.with_data_channel) { dc = std::move(data_service_->create_data_channel()); }
+    using namespace std::placeholders;
+    shared< nuraft::rpc_client_factory > rpc_cli_factory;
 
-    shared< nuraft::rpc_client_factory > rpc_cli_factory(
-        std::make_shared< GroupClientFactory >(raft_channel_factory_, group_id, group_type, dc ? dc->on_group_changed, nullptr));
-
-    std::static_pointer_cast< DCSStateManager >(smgr)->set_data_channel(std::move(dc));
+    if (start_params_.raft_rpc_impl == DCSManager::Params::rpc_impl_t::grpc) {
+        rpc_cli_factory = std::make_shared< GroupClientFactoryGrpc >(
+            raft_service_->client_factory(), group_id, group_type,
+            dc ? std::bind(&DataChannel::on_group_changed, dc.get(), _1) : group_change_cb_t{nullptr});
+    }
 
     // RAFT service interface (stops gRPC service etc...) (TODO)
     shared< nuraft::rpc_listener > listener;
@@ -320,6 +336,7 @@ void DCSManagerImpl::leave_group(group_id_t const& group_id) {
         state_managers_.erase(it);
     }
 
+    data_service_->remove_data_channel(group_id);
     LOGI("Finished leaving: [group={}]", group_id);
 }
 
@@ -334,10 +351,10 @@ void DCSManagerImpl::get_srv_config_all(group_id_t const& group_id,
     raft_service_->get_srv_config_all(group_id, configs_out);
 }
 
-bool DCSManagerImpl::bind_data_channel_request(std::string const& request_name, group_id_t const& group_id,
-                                               data_channel_request_handler_t const& request_handler) {
+rpc_id_t DCSManagerImpl::register_data_channel_rpc(std::string const& rpc_name, group_id_t const& group_id,
+                                                   data_channel_rpc_handler_t const& request_handler) {
     RELEASE_ASSERT(data_service_, "Need to call ::start() first!");
-    return data_service_->bind_data_channel_request(request_name, group_id, request_handler);
+    return data_service_->register_rpc(rpc_name, group_id, request_handler);
 }
 
 shared< DCSManager > init_dcs(DCSManager::Params const& p, weak< DCSApplication > w, bool with_data_svc) {

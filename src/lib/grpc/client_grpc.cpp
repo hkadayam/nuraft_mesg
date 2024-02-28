@@ -28,7 +28,7 @@ void DCSClientGrpc::init() {
         LOGD("Channel looks fine, re-using");
         return;
     }
-    LOGD("Client init ({}) to {}", (!!_stub ? "Again" : "First"), addr_);
+    LOGD("Client init ({}) to {}", (!!stub_ ? "Again" : "First"), addr_);
     sisl::GrpcAsyncClient::init();
     stub_ = sisl::GrpcAsyncClient::make_stub< DCSMessaging >(worker_name_);
 }

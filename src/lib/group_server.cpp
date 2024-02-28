@@ -16,6 +16,7 @@
 // Brief:
 //   RaftGroupServer step function and response transformations
 //
+#include <nuraft_mesg/dcs_state_mgr.hpp>
 #include "group_server.hpp"
 
 namespace nuraft_mesg {
@@ -48,6 +49,6 @@ void DCSStateManager::set_raft_group_server(shared< RaftGroupServer > group_serv
     group_server_ = std::move(group_server);
 }
 
-bool DCSStateManager::is_raft_leader() const { group_server_->is_leader(); }
+bool DCSStateManager::is_raft_leader() const { return group_server_->raft_server()->is_leader(); }
 
 } // namespace nuraft_mesg

@@ -46,7 +46,7 @@ namespace nuraft_mesg {
 class DCSStateManager;
 
 // called by the server after it receives the request
-using data_channel_request_handler_t = sisl::generic_rpc_handler_cb_t;
+using data_channel_rpc_handler_t = std::function< void(sisl::io_blob const&, intrusive< sisl::GenericRpcData >&) >;
 
 class DCSApplication {
 public:
@@ -80,6 +80,8 @@ public:
 
     // Register a new group type
     virtual void register_mgr_type(group_type_t const& group_type, group_params const&) = 0;
+    virtual void start() = 0;
+    virtual void restart_server() = 0;
 
     virtual shared< DCSStateManager > lookup_state_manager(group_id_t const& group_id) const = 0;
     virtual NullAsyncResult create_group(group_id_t const& group_id, group_type_t const& group_type) = 0;
@@ -100,11 +102,10 @@ public:
     virtual void append_peers(group_id_t const& group_id, std::list< peer_id_t >&) const = 0;
     virtual uint32_t logstore_id(group_id_t const& group_id) const = 0;
     virtual int32_t server_id() const = 0;
-    virtual void restart_server() = 0;
 
     // data channel APIs
-    virtual bool bind_data_channel_request(std::string const& request_name, group_id_t const& group_id,
-                                           data_channel_request_handler_t const&) = 0;
+    virtual rpc_id_t register_data_channel_rpc(std::string const& rpc_name, group_id_t const& group_id,
+                                               data_channel_rpc_handler_t const&) = 0;
 };
 
 extern int32_t to_server_id(peer_id_t const& server_addr);
