@@ -20,7 +20,7 @@ on:
         type: string
 
 jobs:
-  SislDeps:
+  SislForkDeps:
     uses: hkadayam/sisl/.github/workflows/build_dependencies.yml@master
     with:
       branch: master
@@ -32,7 +32,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' }}
 
   NuraftMesgDeps:
-    needs: SislDeps
+    needs: SislForkDeps
     uses: ./.github/workflows/build_dependencies.yml
     with:
       branch: ${{ github.ref }}
