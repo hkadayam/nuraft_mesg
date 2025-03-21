@@ -21,7 +21,7 @@ on:
 
 jobs:
   SislDeps:
-    uses: eBay/sisl/.github/workflows/build_dependencies.yml@master
+    uses: hkadayam/sisl/.github/workflows/build_dependencies.yml@master
     with:
       branch: master
       platform: ${{ inputs.platform }}
