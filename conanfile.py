@@ -13,7 +13,7 @@ class NuRaftMesgConan(ConanFile):
     version = "4.1.1"
     homepage = "https://github.com/eBay/nuraft_mesg"
     description = "A gRPC service for NuRAFT"
-    topics = ("ebay", "raft")
+    topics = ("raft")
     url = "https://github.com/eBay/nuraft_mesg"
     license = "Apache-2.0"
 
