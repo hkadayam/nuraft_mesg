@@ -18,9 +18,12 @@ on:
       tooling:
         required: true
         type: string
+      build-level:
+        required: true
+        type: string
 
 jobs:
-  SislForkDeps:
+  SislDeps:
     uses: hkadayam/sisl/.github/workflows/build_dependencies.yml@master
     with:
       branch: master
@@ -29,10 +32,10 @@ jobs:
       malloc-impl: ${{ inputs.malloc-impl }}
       prerelease: ${{ inputs.prerelease }}
       tooling: None
-    if: ${{ github.event_name != 'pull_request' }}
+      build-level: 'Dependencies'
 
   NuraftMesgDeps:
-    needs: SislForkDeps
+    needs: SislDeps
     uses: ./.github/workflows/build_dependencies.yml
     with:
       branch: ${{ github.ref }}
@@ -41,7 +44,7 @@ jobs:
       malloc-impl: ${{ inputs.malloc-impl }}
       prerelease: ${{ inputs.prerelease }}
       tooling: ${{ inputs.tooling }}
-      testing: 'True'
+      build-level: 'Testing'
     if: ${{ github.event_name != 'pull_request' }}
 
   NuraftPRBuild:
@@ -53,5 +56,5 @@ jobs:
       malloc-impl: ${{ inputs.malloc-impl }}
       prerelease: ${{ inputs.prerelease }}
       tooling: ${{ inputs.tooling }}
-      testing: 'True'
+      build-level: 'Packaging'
     if: ${{ github.event_name == 'pull_request' }}
