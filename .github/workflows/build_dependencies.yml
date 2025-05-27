@@ -23,10 +23,10 @@ on:
         required: false
         type: string
         default: 'None'
-      testing:
+      build-level:
         required: false
         type: string
-        default: 'False'
+        default: 'Packaging'
   workflow_dispatch:
     inputs:
       platform:
@@ -71,14 +71,15 @@ on:
           - 'Coverage'
           - 'None'
         default: 'None'
-      testing:
-        description: 'Build and Run'
+      build-level:
+        description: 'Level to build'
         required: true
         type: choice
         options:
-          - 'True'
-          - 'False'
-        default: 'True'
+          - 'Dependencies'
+          - 'Packaging'
+          - 'Testing'
+        default: 'Testing'
 
 jobs:
   BuildNuraftMesgDeps:
@@ -88,20 +89,19 @@ jobs:
       uses: actions/checkout@main
       with:
         ref: ${{ inputs.branch }}
-      if: ${{ inputs.testing == 'True' }}
+      if: ${{ inputs.build-level == 'Testing' }}
 
     - name: Retrieve Recipe
       uses: actions/checkout@main
       with:
         repository: hkadayam/nuraft_mesg
         ref: ${{ inputs.branch }}
-      if: ${{ inputs.testing == 'False' }}
+      if: ${{ inputs.build-level != 'Testing' }}
 
     - name: Load NuRaftMsg Cache
       id: restore-cache
       uses: hkadayam/sisl/.github/actions/load_conan@master
       with:
-        testing: ${{ inputs.testing }}
         key_prefix: NuMesgDeps-${{ inputs.platform }}-${{ inputs.build-type }}-${{ inputs.malloc-impl }}-${{ inputs.prerelease }}
 
     - name: Retrieve Dependencies
@@ -110,84 +110,83 @@ jobs:
         repository: hkadayam/sisl
         path: import/sisl
         ref: master
-      if: ${{ inputs.testing == 'True' || steps.restore-cache.outputs.cache-hit != 'true' }}
+      if: ${{ steps.restore-cache.outputs.cache-hit != 'true' || inputs.build-level != 'Dependencies' }}
 
-    - name: Load Sisl Cache
+    - name: Load SislDeps Cache
       uses: hkadayam/sisl/.github/actions/load_conan@master
       with:
-        testing: 'False'
         path: import/sisl
-        key_prefix: SislForkDeps-${{ inputs.platform }}-${{ inputs.build-type }}-${{ inputs.malloc-impl }}-${{ inputs.prerelease }}
+        key_prefix: SislDeps-${{ inputs.platform }}-${{ inputs.build-type }}-${{ inputs.malloc-impl }}-${{ inputs.prerelease }}
         fail_on_cache_miss: false 
-      if: ${{ inputs.testing == 'True' || steps.restore-cache.outputs.cache-hit != 'true' }}
+      if: ${{ steps.restore-cache.outputs.cache-hit != 'true' }}
 
     - name: Setup Conan
       uses: hkadayam/sisl/.github/actions/setup_conan@master
       with:
         platform: ${{ inputs.platform }}
-      if: ${{ inputs.testing == 'True' || steps.restore-cache.outputs.cache-hit != 'true' }}
+      if: ${{ steps.restore-cache.outputs.cache-hit != 'true' || inputs.build-level != 'Dependencies' }}
 
     - name: Prepare Recipes
       run: |
-        conan export import/sisl oss/master
+        conan export import/sisl --user oss --channel master
         ./prepare.sh
         cached_pkgs=$(ls -1d ~/.conan/data/*/*/*/*/package | sed 's,.*data/,,' | cut -d'/' -f1,2 | paste -sd',' - -)
         echo "::info:: Pre-cached: ${cached_pkgs}"
-      if: ${{ inputs.testing == 'True' || steps.restore-cache.outputs.cache-hit != 'true' }}
+      if: ${{ steps.restore-cache.outputs.cache-hit != 'true' || inputs.build-level != 'Dependencies' }}
 
-    - name: Build Cache
+    - name: Build NuraftMesgDeps Cache
       run: |
         conan install \
-            -o sisl:prerelease=${{ inputs.prerelease }} \
-            -o sisl:malloc_impl=${{ inputs.malloc-impl }} \
+            -o "sisl/*:prerelease=${{ inputs.prerelease }}" \
+            -o "sisl/*:malloc_impl=${{ inputs.malloc-impl }}" \
             -s build_type=${{ inputs.build-type }} \
             -c tools.build:skip_test=True \
             --build missing \
             .
       if: ${{ steps.restore-cache.outputs.cache-hit != 'true' }}
 
-    - name: Save Conan Cache
+    - name: Save NuraftMesgDeps Cache
       uses: hkadayam/sisl/.github/actions/store_conan@master
       with:
         key_prefix: NuMesgDeps-${{ inputs.platform }}-${{ inputs.build-type }}-${{ inputs.malloc-impl }}-${{ inputs.prerelease }}
-      if: ${{ github.event_name != 'pull_request' && steps.restore-cache.outputs.cache-hit != 'true' }}
+      if: ${{ steps.restore-cache.outputs.cache-hit != 'true' }}
 
     - name: Reload Sisl Cache
       uses: hkadayam/sisl/.github/actions/load_conan@master
       with:
         testing: 'False'
         path: import/sisl
-        key_prefix: SislForkDeps-${{ inputs.platform }}-${{ inputs.build-type }}-${{ inputs.malloc-impl }}-${{ inputs.prerelease }}
+        key_prefix: SislDeps-${{ inputs.platform }}-${{ inputs.build-type }}-${{ inputs.malloc-impl }}-${{ inputs.prerelease }}
         fail_on_cache_miss: true
-      if: ${{ inputs.testing == 'True' && github.event_name != 'pull_request' && steps.restore-cache.outputs.cache-hit != 'true' }}
+      if: ${{ steps.restore-cache.outputs.cache-hit != 'true' }}
 
     - name: Create and Test Package
       run: |
         sanitize=$([[ "${{ inputs.tooling }}" == "Sanitize" ]] && echo "True" || echo "False")
         conan create \
-            -o sisl:prerelease=${{ inputs.prerelease }} \
-            -o sisl:malloc_impl=${{ inputs.malloc-impl }} \
-            -o nuraft_mesg:sanitize=${sanitize} \
+            -o "sisl/*:prerelease=${{ inputs.prerelease }}" \
+            -o "sisl/*:malloc_impl=${{ inputs.malloc-impl }}" \
+            -o nuraft_mesg/*:sanitize=${sanitize} \
             -s build_type=${{ inputs.build-type }} \
             --build missing \
             .
-      if: ${{ inputs.testing == 'True' && inputs.tooling != 'Coverage' }}
+      if: ${{ inputs.build-level != 'Dependencies' && inputs.tooling != 'Coverage' }}
 
     - name: Code Coverage Run
       run: |
-        conan install \
-            -o sisl:prerelease=${{ inputs.prerelease }} \
-            -o sisl:malloc_impl=${{ inputs.malloc-impl }} \
+        conan export import/sisl --user oss --channel master
+        conan build \
+            -o "sisl/*:prerelease=${{ inputs.prerelease }}"" \
+            -o "sisl/*:malloc_impl=${{ inputs.malloc-impl }}"" \
             -o coverage=True \
             -s build_type=${{ inputs.build-type }} \
             --build missing \
             .
-        conan build .
-      if: ${{ inputs.testing == 'True' && inputs.tooling == 'Coverage' }}
+      if: ${{ inputs.build-level != 'Dependencies' && inputs.tooling == 'Coverage' }}
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         gcov: true
-      if: ${{ inputs.testing == 'True' && inputs.tooling == 'Coverage' }}
+      if: ${{ inputs.build-level != 'Dependencies' && inputs.tooling == 'Coverage' }}
